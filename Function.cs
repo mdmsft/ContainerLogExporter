@@ -28,15 +28,15 @@ public class Function
             {
                 logger.LogInformation("PodNamespace: {PodNamespace}, ContainerName: {ContainerName}, TimeGenerated: {TimeGenerated}, LogMessage: {LogMessage}, LogSource: {LogSource}, ContainerId: {ContainerId}, Computer: {Computer}, PodName: {PodName}",
                     record.PodNamespace, record.ContainerName, record.TimeGenerated, record.LogMessage, record.LogSource, record.ContainerId, record.Computer, record.PodName);
-                TableClient tableClient = tableServiceClient.GetTableClient(record.PodNamespace);
+                TableClient tableClient = tableServiceClient.GetTableClient(record.PodNamespace.Replace("-", ""));
                 await tableClient.CreateIfNotExistsAsync();
                 TableEntity entity = new(record.ContainerName, record.TimeGenerated)
                 {
                     { "Message", record.LogMessage },
                     { "Source", record.LogSource },
-                    { "ContainerId", record.ContainerId },
-                    { "Computer",  record.Computer },
+                    { "Container", record.ContainerId },
                     { "Pod",  record.PodName },
+                    { "Node",  record.Computer },
                 };
                 await tableClient.AddEntityAsync(entity);
             }
