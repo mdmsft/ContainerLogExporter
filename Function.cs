@@ -13,7 +13,7 @@ public class Function
     }
 
     [Function(nameof(Function))]
-    public void Run([EventHubTrigger("%EVENT_HUB_NAME%")] string[] messages)
+    public void Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages)
     {
         logger.LogInformation("Event Hub messages: {0}", string.Join(",", messages));
     }
