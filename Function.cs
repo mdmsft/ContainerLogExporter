@@ -26,6 +26,8 @@ public class Function
             Message msg = JsonSerializer.Deserialize<Message>(messaage);
             foreach (var record in msg.Records)
             {
+                logger.LogInformation("PodNamespace: {PodNamespace}, ContainerName: {ContainerName}, TimeGenerated: {TimeGenerated}, LogMessage: {LogMessage}, LogSource: {LogSource}, ContainerId: {ContainerId}, Computer: {Computer}, PodName: {PodName}",
+                    record.PodNamespace, record.ContainerName, record.TimeGenerated, record.LogMessage, record.LogSource, record.ContainerId, record.Computer, record.PodName);
                 TableClient tableClient = tableServiceClient.GetTableClient(record.PodNamespace);
                 await tableClient.CreateIfNotExistsAsync();
                 TableEntity entity = new(record.ContainerName, record.TimeGenerated)
