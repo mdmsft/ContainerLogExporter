@@ -11,9 +11,9 @@ internal class SecretService
         this.secretClient = secretClient;
     }
 
-    public async Task<string?> GetWorkspaceKey(string workspace)
+    public async Task<(string? id, string? key)> GetWorkspaceInfo(string workspace)
     {
         KeyVaultSecret secret = await secretClient.GetSecretAsync(workspace);
-        return secret.Value;
+        return (secret.Value?.Split(':')[0], secret.Value?.Split(':')[1]);
     }
 }
