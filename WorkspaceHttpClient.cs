@@ -28,12 +28,12 @@ internal class WorkspaceHttpClient : HttpClient
         this.DefaultRequestHeaders.Accept.Add(new(MediaTypeNames.Application.Json));
         this.DefaultRequestHeaders.Add("Log-Type", LogName);
         this.DefaultRequestHeaders.Add("x-ms-date", this.dateString);
-        this.DefaultRequestHeaders.Add("time-generated-field", nameof(Record.TimeGenerated));
+        this.DefaultRequestHeaders.Add("time-generated-field", nameof(Entity.TimeGenerated));
     }
 
-    public async Task SendLogs(Record[] records)
+    public async Task SendLogs(Entity[] entities)
     {
-        string json = JsonSerializer.Serialize(records);
+        string json = JsonSerializer.Serialize(entities);
         using HttpContent httpContent = new StringContent(json, Encoding.UTF8);
         httpContent.Headers.ContentType = new(MediaTypeNames.Application.Json);
         this.DefaultRequestHeaders.Authorization = new(AuthorizationScheme, GetAuthorizationHeaderValue(json));

@@ -2,7 +2,7 @@
 
 namespace ContainerLogExporter;
 
-internal class Record
+internal class Model
 {
     [JsonPropertyName(nameof(TimeGenerated))]
     public string TimeGenerated { get; set; } = string.Empty;
@@ -34,4 +34,15 @@ internal class Record
 
     [JsonPropertyName(nameof(LogSource))]
     public string LogSource { get; set; } = string.Empty;
+
+    public Entity ToEntity() => new()
+    {
+        ContainerId = ContainerId,
+        ContainerName = ContainerName,
+        LogMessage = LogMessage,
+        LogSource = LogSource,
+        NodeName = Computer,
+        PodName = PodName,
+        TimeGenerated = TimeGenerated
+    };
 }

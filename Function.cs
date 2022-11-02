@@ -30,7 +30,7 @@ internal class Function
                 }
                 foreach (var group in msg.Records.GroupBy(record => record.PodNamespace))
                 {
-                    await workspaceService.SendLogs(group.Key, group.ToArray());
+                    await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
                 }
             }
             catch (JsonException exception)

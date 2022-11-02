@@ -14,7 +14,7 @@ internal class WorkspaceService
         this.logger = logger;
     }
 
-    public async Task SendLogs(string @namespace, Record[] records)
+    public async Task SendLogs(string @namespace, Entity[] entities)
     {
         using var scope = logger.BeginScope<string>(@namespace);
         (string? id, string? key) = await secretService.GetWorkspaceInfo(@namespace);
@@ -24,7 +24,7 @@ internal class WorkspaceService
             return;
         }
         using WorkspaceHttpClient httpClient = new(id, key);
-        logger.LogInformation(Events.WorkspaceSendLogs, "Sending {count} records to {workspace} workspace", records.Length, @namespace);
-        await httpClient.SendLogs(records);
+        logger.LogInformation(Events.WorkspaceSendLogs, "Sending {count} records to {workspace} workspace", entities.Length, @namespace);
+        await httpClient.SendLogs(entities);
     }
 }
