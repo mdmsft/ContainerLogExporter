@@ -5,33 +5,33 @@ namespace ContainerLogExporter;
 internal class Record
 {
     [JsonPropertyName(nameof(TimeGenerated))]
-    public string TimeGenerated { get; set; }
+    public string TimeGenerated { get; set; } = string.Empty;
 
 
     [JsonPropertyName(nameof(Computer))]
-    public string Computer { get; set; }
+    public string Computer { get; set; } = string.Empty;
 
 
     [JsonPropertyName(nameof(ContainerId))]
-    public string ContainerId { get; set; }
+    public string ContainerId { get; set; } = string.Empty;
 
 
     [JsonPropertyName(nameof(ContainerName))]
-    public string ContainerName { get; set; }
+    public string ContainerName { get; set; } = string.Empty;
 
 
     [JsonPropertyName(nameof(PodName))]
-    public string PodName { get; set; }
+    public string PodName { get; set; } = string.Empty;
 
 
     [JsonPropertyName(nameof(PodNamespace))]
-    public string PodNamespace { get; set; }
+    public string PodNamespace { get; set; } = string.Empty;
 
 
     [JsonPropertyName(nameof(LogMessage))]
-    public string LogMessage { get; set; }
+    public string LogMessage { get; set; } = string.Empty;
 
 
     [JsonPropertyName(nameof(LogSource))]
-    public string LogSource { get; set; }
+    public string LogSource { get; set; } = string.Empty;
 }

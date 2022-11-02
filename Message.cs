@@ -5,5 +5,5 @@ namespace ContainerLogExporter;
 internal class Message
 {
     [JsonPropertyName("records")]
-    public Record[] Records { get; set; }
+    public Record[] Records { get; set; } = Array.Empty<Record>();
 }

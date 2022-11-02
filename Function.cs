@@ -1,44 +1,41 @@
-using Azure.Data.Tables;
-using Azure.Identity;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace ContainerLogExporter;
 
-public class Function
+internal class Function
 {
     private readonly ILogger logger;
-    private readonly TableServiceClient tableServiceClient;
+    private readonly WorkspaceService workspaceService;
 
-    public Function(ILoggerFactory loggerFactory, IConfiguration configuration)
+    public Function(ILoggerFactory loggerFactory, WorkspaceService workspaceService)
     {
         logger = loggerFactory.CreateLogger<Function>();
-        tableServiceClient = new TableServiceClient(configuration.GetValue<Uri>("TABLE_SERVICE_URI"), new ManagedIdentityCredential());
+        this.workspaceService = workspaceService;
     }
 
     [Function(nameof(Function))]
     public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages)
     {
-        foreach (var messaage in messages)
+        foreach (var message in messages)
         {
-            Message msg = JsonSerializer.Deserialize<Message>(messaage);
-            foreach (var record in msg.Records)
+            try
             {
-                logger.LogInformation("PodNamespace: {PodNamespace}, ContainerName: {ContainerName}, TimeGenerated: {TimeGenerated}, LogMessage: {LogMessage}, LogSource: {LogSource}, ContainerId: {ContainerId}, Computer: {Computer}, PodName: {PodName}",
-                    record.PodNamespace, record.ContainerName, record.TimeGenerated, record.LogMessage, record.LogSource, record.ContainerId, record.Computer, record.PodName);
-                TableClient tableClient = tableServiceClient.GetTableClient(record.PodNamespace.Replace("-", ""));
-                await tableClient.CreateIfNotExistsAsync();
-                TableEntity entity = new(record.ContainerName, record.TimeGenerated)
+                Message? msg = JsonSerializer.Deserialize<Message>(message);
+                if (msg is null || msg is { Records: { Length: 0}})
                 {
-                    { "Message", record.LogMessage },
-                    { "Source", record.LogSource },
-                    { "Container", record.ContainerId },
-                    { "Pod",  record.PodName },
-                    { "Node",  record.Computer },
-                };
-                await tableClient.AddEntityAsync(entity);
+                    logger.LogWarning(Events.MessageIsNullOrEmpty, "Message is null or empty: {message}", message);
+                    return;
+                }
+                foreach (var group in msg.Records.GroupBy(record => record.PodNamespace))
+                {
+                    await workspaceService.SendLogs(group.Key, group.ToArray());
+                }
+            }
+            catch (JsonException exception)
+            {
+                logger.LogError(Events.MessageCannotBeDeserialized, exception, "Error deserializing message: {message}", message);
             }
         }
     }
