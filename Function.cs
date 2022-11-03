@@ -1,6 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Linq;
 using System.Text.Json;
 
 namespace ContainerLogExporter;
@@ -9,25 +9,21 @@ internal class Function
 {
     private readonly ILogger logger;
     private readonly WorkspaceService workspaceService;
-    private readonly string[] ignoredNamespaces = new[]
+    private readonly string[] ignoredNamespaces;
+    private readonly string[] defaultIgnoredNamespaces = new[]
     {
-        "aad-pod-identity",
-        "argocd",
-        "calico-system",
         "default",
         "gatekeeper-system",
         "kube-node-lease",
         "kube-system",
         "kube-public",
-        "kyverno",
-        "service-operator-system",
-        "tigera-operator"
     };
 
-    public Function(ILoggerFactory loggerFactory, WorkspaceService workspaceService)
+    public Function(ILoggerFactory loggerFactory, IConfiguration configuration, WorkspaceService workspaceService)
     {
         logger = loggerFactory.CreateLogger<Function>();
         this.workspaceService = workspaceService;
+        ignoredNamespaces = configuration.GetValue("IgnoredNamespaces", defaultIgnoredNamespaces);
     }
 
     [Function(nameof(Function))]
