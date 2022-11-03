@@ -29,7 +29,7 @@ internal class Function
     [Function(nameof(Function))]
     public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub", IsBatched = false)] string message)
     {
-        logger.LogInformation(message);
+        logger.LogInformation(4004, "Input message: {message}", message);
         try
         {
             Message? msg = JsonSerializer.Deserialize<Message>(message);
