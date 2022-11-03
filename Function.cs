@@ -27,27 +27,25 @@ internal class Function
     }
 
     [Function(nameof(Function))]
-    public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub", IsBatched = false)] string[] messages)
+    public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub", IsBatched = false)] string message)
     {
-        foreach (var message in messages)
+        logger.LogInformation(message);
+        try
         {
-            try
+            Message? msg = JsonSerializer.Deserialize<Message>(message);
+            if (msg is null || msg is { Records.Length: 0 })
             {
-                Message? msg = JsonSerializer.Deserialize<Message>(message);
-                if (msg is null || msg is { Records.Length: 0 })
-                {
-                    logger.LogWarning(Events.MessageIsNullOrEmpty, "Message is null or empty: {message}", message);
-                    return;
-                }
-                foreach (var group in msg.Records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
-                {
-                    await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
-                }
+                logger.LogWarning(Events.MessageIsNullOrEmpty, "Message is null or empty: {message}", message);
+                return;
             }
-            catch (JsonException exception)
+            foreach (var group in msg.Records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
             {
-                logger.LogError(Events.MessageCannotBeDeserialized, exception, "Error deserializing message: {message}", message);
+                await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
             }
+        }
+        catch (JsonException exception)
+        {
+            logger.LogError(Events.MessageCannotBeDeserialized, exception, "Error deserializing message: {message}", message);
         }
     }
 }
