@@ -27,25 +27,29 @@ internal class Function
     }
 
     [Function(nameof(Function))]
-    public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub", IsBatched = false)] string message)
+    public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, CancellationToken cancellationToken)
     {
-        logger.LogInformation(4004, "Input message: {message}", message);
-        try
+        foreach (string message in messages)
         {
-            Message? msg = JsonSerializer.Deserialize<Message>(message);
-            if (msg is null || msg is { Records.Length: 0 })
+            cancellationToken.ThrowIfCancellationRequested();
+            logger.LogInformation(4004, "Input message: {message}", message);
+            try
             {
-                logger.LogWarning(Events.MessageIsNullOrEmpty, "Message is null or empty: {message}", message);
-                return;
+                Message? msg = JsonSerializer.Deserialize<Message>(message);
+                if (msg is null || msg is { Records.Length: 0 })
+                {
+                    logger.LogWarning(Events.MessageIsNullOrEmpty, "Message is null or empty: {message}", message);
+                    return;
+                }
+                foreach (var group in msg.Records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
+                {
+                    await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
+                }
             }
-            foreach (var group in msg.Records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
+            catch (JsonException exception)
             {
-                await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
+                logger.LogError(Events.MessageCannotBeDeserialized, exception, "Error deserializing message: {message}", message);
             }
-        }
-        catch (JsonException exception)
-        {
-            logger.LogError(Events.MessageCannotBeDeserialized, exception, "Error deserializing message: {message}", message);
         }
     }
 }

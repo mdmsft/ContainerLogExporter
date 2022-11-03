@@ -3,13 +3,14 @@ using Azure.Identity;
 using Azure.ResourceManager;
 using ContainerLogExporter;
 using Microsoft.ApplicationInsights.Extensibility;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 TokenCredential tokenCredential = new ManagedIdentityCredential();
 
 await new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureFunctionsWorkerDefaults(builder => builder.AddApplicationInsights().AddApplicationInsightsLogger())
     .ConfigureServices(services => services
         .Configure<TelemetryConfiguration>(configuration => configuration.SetAzureTokenCredential(tokenCredential)).AddApplicationInsightsTelemetryWorkerService()
         .AddMemoryCache()
