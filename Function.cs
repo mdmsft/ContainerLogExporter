@@ -2,7 +2,9 @@ using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace ContainerLogExporter;
 
@@ -39,9 +41,10 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            string msg = Regex.Replace(message, """LogMessage":\s*([^"].+[^"]),\s*"LogSource""", "$1", RegexOptions.Compiled | RegexOptions.Multiline);
             try
             {
-                using JsonDocument document = JsonDocument.Parse(message);
+                using JsonDocument document = JsonDocument.Parse(msg, new JsonDocumentOptions());
                 JsonElement root = document.RootElement.GetProperty("records");
                 List<Model> records = new();
                 foreach (JsonElement record in root.EnumerateArray())
@@ -62,7 +65,7 @@ internal class Function
                 }
                 if (records.Count == 0)
                 {
-                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty or has invalid records: {message}", message);
+                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty or has invalid records: {message}", msg);
                     return;
                 }
                 logger.LogInformation(Events.RecordsFound, "Found {count} valid records in the message", records.Count);
@@ -73,7 +76,7 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", message);
+                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", Convert.ToBase64String(Encoding.UTF8.GetBytes(msg)));
             }
         }
     }
