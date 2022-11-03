@@ -36,31 +36,44 @@ internal class Function
     [Function(nameof(Function))]
     public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, CancellationToken cancellationToken)
     {
-        telemetryClient.TrackEvent("input", new Dictionary<string, string>
-        {
-            {  "messagesCount", messages.Length.ToString() },
-            {  "lastWord", messages[messages.Length - 1][^16..] }
-        });
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            logger.LogInformation(4004, "Input message: {message}", message);
             try
             {
-                Message? msg = JsonSerializer.Deserialize<Message>(message);
-                if (msg is null || msg is { Records.Length: 0 })
+                using JsonDocument document = JsonDocument.Parse(message);
+                JsonElement root = document.RootElement.GetProperty("records");
+                List<Model> records = new();
+                foreach (JsonElement record in root.EnumerateArray())
                 {
-                    logger.LogWarning(Events.MessageIsNullOrEmpty, "Message is null or empty: {message}", message);
+                    try
+                    {
+                        Model? model = JsonSerializer.Deserialize<Model>(record);
+                        if (model is not null)
+                        {
+                            records.Add(model);
+                        }
+                    }
+                    catch (JsonException exception)
+                    {
+                        logger.LogError(Events.RecordCannotBeDeserialized, exception, "Error deserializing record: {record}", record.ToString());
+                        continue;
+                    }
+                }
+                if (records.Count == 0)
+                {
+                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty or has invalid records: {message}", message);
                     return;
                 }
-                foreach (var group in msg.Records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
+                logger.LogInformation(Events.RecordsFound, "Found {count} valid records in the message", records.Count);
+                foreach (var group in records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
                 {
                     await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
                 }
             }
             catch (JsonException exception)
             {
-                logger.LogError(Events.MessageCannotBeDeserialized, exception, "Error deserializing message: {message}", message);
+                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", message);
             }
         }
     }

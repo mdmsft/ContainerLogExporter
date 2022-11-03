@@ -4,8 +4,10 @@ namespace ContainerLogExporter;
 
 internal static class Events
 {
-    public static readonly EventId MessageIsNullOrEmpty = 1000;
-    public static readonly EventId MessageCannotBeDeserialized = 1001;
+    public static readonly EventId MessageIsEmpty = 1000;
+    public static readonly EventId MessageCannotBeParsed = 1001;
+    public static readonly EventId RecordCannotBeDeserialized = 1002;
+    public static readonly EventId RecordsFound = 1003;
 
     public static readonly EventId WorkspaceLookup = 2000;
     public static readonly EventId WorkspaceCacheMiss = 2001;
