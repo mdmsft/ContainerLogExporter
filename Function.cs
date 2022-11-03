@@ -1,3 +1,4 @@
+using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,10 @@ namespace ContainerLogExporter;
 internal class Function
 {
     private readonly ILogger logger;
+    private readonly ILoggerFactory loggerFactory;
+    private readonly IConfiguration configuration;
     private readonly WorkspaceService workspaceService;
+    private readonly TelemetryClient telemetryClient;
     private readonly string[] ignoredNamespaces;
     private readonly string[] defaultIgnoredNamespaces = new[]
     {
@@ -19,16 +23,24 @@ internal class Function
         "kube-public",
     };
 
-    public Function(ILoggerFactory loggerFactory, IConfiguration configuration, WorkspaceService workspaceService)
+    public Function(ILoggerFactory loggerFactory, IConfiguration configuration, WorkspaceService workspaceService, TelemetryClient telemetryClient)
     {
         logger = loggerFactory.CreateLogger<Function>();
+        this.loggerFactory = loggerFactory;
+        this.configuration = configuration;
         this.workspaceService = workspaceService;
+        this.telemetryClient = telemetryClient;
         ignoredNamespaces = configuration.GetValue("IgnoredNamespaces", defaultIgnoredNamespaces);
     }
 
     [Function(nameof(Function))]
     public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, CancellationToken cancellationToken)
     {
+        telemetryClient.TrackEvent("input", new Dictionary<string, string>
+        {
+            {  "messagesCount", messages.Length.ToString() },
+            {  "lastWord", messages[messages.Length - 1][^16..] }
+        });
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
