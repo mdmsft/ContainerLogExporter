@@ -4,9 +4,7 @@
     <AzureFunctionsVersion>v4</AzureFunctionsVersion>
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>    
-    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
-    <PublishReadyToRun>true</PublishReadyToRun>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.7.0" />
