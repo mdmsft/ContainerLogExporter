@@ -43,7 +43,7 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string msg = Regex.Replace(HttpUtility.JavaScriptStringEncode(message.Replace(Environment.NewLine, string.Empty)), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
+            string msg = Regex.Replace(HttpUtility.JavaScriptStringEncode(message.Replace(Environment.NewLine, string.Empty), true), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
                 Model[]? records = JsonSerializer.Deserialize<Message>(msg)?.Records;
