@@ -1,7 +1,5 @@
-using Azure.Storage.Blobs;
 using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.WebJobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -34,14 +32,12 @@ internal class Function
     }
 
     [Function(nameof(Function))]
-    public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, [Blob("messages")] BlobContainerClient blobContainerClient, CancellationToken cancellationToken)
+    [BlobOutput("messages/message.json", Connection = "Blob")]
+    public async Task<string> Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, CancellationToken cancellationToken)
     {
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(message));
-            await blobContainerClient.CreateIfNotExistsAsync();
-            await blobContainerClient.UploadBlobAsync($"{DateTime.UtcNow.ToString("yyyy-MM-dd-hh-mm-ss")}.json", stream);
             string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
@@ -67,7 +63,7 @@ internal class Function
                 if (records.Count == 0)
                 {
                     logger.LogWarning(Events.MessageIsEmpty, "Message is empty or has invalid records: {message}", msg);
-                    return;
+                    continue;
                 }
                 logger.LogInformation(Events.RecordsFound, "Found {count} valid records in the message", records.Count);
                 foreach (var group in records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
@@ -80,5 +76,6 @@ internal class Function
                 logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", Convert.ToBase64String(Encoding.UTF8.GetBytes(message)));
             }
         }
+        return string.Join(string.Empty, messages);
     }
 }
