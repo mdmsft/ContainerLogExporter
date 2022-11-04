@@ -61,7 +61,7 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                string name = $"{DateTime.UtcNow.ToString("yyyy-MM-dd-hh-mm-ss")}.json";
+                string name = $"{DateTime.UtcNow.ToString("yyyy-MM-dd-HH-mm-ss")}.json";
                 byte[] buffer = Encoding.UTF8.GetBytes(msg);
                 using Stream stream = new MemoryStream(buffer);
                 await blobContainerClient.UploadBlobAsync(name, stream);
