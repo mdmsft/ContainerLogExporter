@@ -43,8 +43,7 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string msg = HttpUtility.JavaScriptStringEncode(message, true);
-            // string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
+            string msg = Regex.Replace(HttpUtility.JavaScriptStringEncode(message.Replace(Environment.NewLine, string.Empty)), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
                 Model[]? records = JsonSerializer.Deserialize<Message>(msg)?.Records;
@@ -61,11 +60,9 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                string name = $"{DateTime.UtcNow.ToString("yyyy-MM-dd-HH-mm-ss")}.json";
-                byte[] buffer = Encoding.UTF8.GetBytes(msg);
-                using Stream stream = new MemoryStream(buffer);
-                await blobContainerClient.UploadBlobAsync(name, stream);
-                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in {blob} blob.", name);
+                using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(msg));
+                await blobContainerClient.UploadBlobAsync($"{functionContext.InvocationId}.json", stream);
+                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blob.");
             }
         }
     }
