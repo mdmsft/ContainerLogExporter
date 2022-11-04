@@ -43,13 +43,15 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string msg = Regex.Replace(HttpUtility.JavaScriptStringEncode(message.Replace(Environment.NewLine, string.Empty), true), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
+            string encodedJson = HttpUtility.JavaScriptStringEncode(message);
+            string sanitizedJson = encodedJson.Replace("\\\"", "\"");
+            string json = Regex.Replace(sanitizedJson, """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
-                Model[]? records = JsonSerializer.Deserialize<Message>(msg)?.Records;
+                Model[]? records = JsonSerializer.Deserialize<Message>(json)?.Records;
                 if (records is not { Length: >0 })
                 {
-                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty {message}", msg);
+                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty {message}", json);
                     continue;
                 }
                 logger.LogInformation(Events.RecordsFound, "Found {count} records in the message", records.Length);
@@ -60,10 +62,21 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(msg));
-                await blobContainerClient.UploadBlobAsync($"{functionContext.InvocationId}.json", stream);
-                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blob.");
+                await Task.WhenAll(new[]
+                {
+                    UploadBlob($"{functionContext.InvocationId}-org", message),
+                    UploadBlob($"{functionContext.InvocationId}-enc", encodedJson),
+                    UploadBlob($"{functionContext.InvocationId}-cln", sanitizedJson),
+                    UploadBlob(functionContext.InvocationId, json)
+                });
+                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blobs.");
             }
         }
+    }
+
+    private async Task UploadBlob(string name, string data)
+    {
+        using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(data));
+        await blobContainerClient.UploadBlobAsync(name, stream);
     }
 }
