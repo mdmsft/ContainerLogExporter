@@ -1,5 +1,4 @@
 using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
 using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
@@ -16,7 +15,7 @@ internal class Function
     private readonly WorkspaceService workspaceService;
     private readonly TelemetryClient telemetryClient;
     private readonly BlobContainerClient blobContainerClient;
-    private readonly string[] ignoredNamespaces;
+    private readonly HashSet<string> ignoredNamespaces;
     private readonly string[] defaultIgnoredNamespaces = new[]
     {
         "default",
@@ -32,51 +31,39 @@ internal class Function
         this.workspaceService = workspaceService;
         this.telemetryClient = telemetryClient;
         this.blobContainerClient = blobContainerClient;
-        ignoredNamespaces = configuration.GetValue("IgnoredNamespaces", defaultIgnoredNamespaces);
+        ignoredNamespaces = new(configuration.GetValue<string[]>("IgnoredNamespaces", defaultIgnoredNamespaces));
     }
 
     [Function(nameof(Function))]
     public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, FunctionContext functionContext, CancellationToken cancellationToken)
     {
         ILogger<Function> logger = functionContext.GetLogger<Function>();
-        using var _ = logger.BeginScope(string.Empty);
+        using var _ = logger.BeginScope(functionContext.InvocationId);
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string encodedJson = HttpUtility.JavaScriptStringEncode(message);
-            string sanitizedJson = encodedJson.Replace("\\\"", "\"");
-            string json = Regex.Replace(sanitizedJson, """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
+            string json = Regex.Replace(HttpUtility.JavaScriptStringEncode(message).Replace("\\\"", "\""), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
                 Model[]? records = JsonSerializer.Deserialize<Message>(json)?.Records;
-                if (records is not { Length: >0 })
+                if (records is not { Length: > 0 })
                 {
-                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty {message}", json);
+                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty: {message}", json);
                     continue;
                 }
-                logger.LogInformation(Events.RecordsFound, "Found {count} records in the message", records.Length);
-                foreach (var group in records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
+                Model[] valuableRecords = records.Where(record => !ignoredNamespaces.Contains(record.PodNamespace)).ToArray();
+                logger.LogInformation(Events.RecordsFound, "Found {total} records in the message, but only {valuable} are valuable", records.Length, valuableRecords.Length);
+                foreach (var group in valuableRecords.GroupBy(record => record.PodNamespace))
                 {
                     await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
                 }
             }
             catch (JsonException exception)
             {
-                await Task.WhenAll(new[]
-                {
-                    UploadBlob($"{functionContext.InvocationId}-org", message),
-                    UploadBlob($"{functionContext.InvocationId}-enc", encodedJson),
-                    UploadBlob($"{functionContext.InvocationId}-cln", sanitizedJson),
-                    UploadBlob(functionContext.InvocationId, json)
-                });
-                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blobs.");
+                using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+                await blobContainerClient.UploadBlobAsync($"{functionContext.InvocationId}.json", stream);
+                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blob.");
             }
         }
-    }
-
-    private async Task UploadBlob(string name, string data)
-    {
-        using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(data));
-        await blobContainerClient.UploadBlobAsync(name, stream);
     }
 }

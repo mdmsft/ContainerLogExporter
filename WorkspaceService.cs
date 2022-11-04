@@ -2,6 +2,8 @@ using Azure.ResourceManager;
 using Azure.ResourceManager.OperationalInsights;
 using Azure.ResourceManager.OperationalInsights.Models;
 using Azure.ResourceManager.Resources;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -12,14 +14,15 @@ internal class WorkspaceService
     private readonly ArmClient armClient;
     private readonly IMemoryCache memoryCache;
     private readonly ILogger<WorkspaceService> logger;
-
+    private readonly TelemetryClient telemetryClient;
     private const string NamespaceTag = "namespace";
 
-    public WorkspaceService(ArmClient armClient, IMemoryCache memoryCache, ILogger<WorkspaceService> logger)
+    public WorkspaceService(ArmClient armClient, IMemoryCache memoryCache, ILogger<WorkspaceService> logger, TelemetryClient telemetryClient)
     {
         this.armClient = armClient;
         this.memoryCache = memoryCache;
         this.logger = logger;
+        this.telemetryClient = telemetryClient;
     }
 
     public async Task SendLogs(string @namespace, Entity[] entities)
@@ -33,9 +36,13 @@ internal class WorkspaceService
             SubscriptionResource subscription = await armClient.GetDefaultSubscriptionAsync();
             await foreach (WorkspaceResource workspace in subscription.GetWorkspacesAsync())
             {
+                telemetryClient.TrackTrace($"Loading workspace {workspace.Id}", SeverityLevel.Verbose);
+                await workspace.GetAsync();
                 if (workspace.Data.Tags.ContainsKey(NamespaceTag) && workspace.Data.Tags[NamespaceTag] == @namespace)
                 {
+                    telemetryClient.TrackTrace($"Found workspace {workspace.Id.Name} for namespace {@namespace}", SeverityLevel.Verbose);
                     SharedKeys sharedKeys = await workspace.GetSharedKeysSharedKeyAsync();
+                    telemetryClient.TrackTrace($"Found shared keys in workspace {workspace.Id.Name}", SeverityLevel.Verbose);
                     string workspaceId = workspace.Data.CustomerId;
                     string sharedKey = sharedKeys.PrimarySharedKey;
                     logger.LogInformation(Events.WorkspaceFound, "Found workspace for namespace {namespace}: CustomerId = {customerId}, PSK = {sharedKey}", @namespace, $"{workspaceId[..8]}-***", $"***-{sharedKey[^8..]}");
