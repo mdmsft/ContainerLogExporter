@@ -47,7 +47,7 @@ internal class Function
             // string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
-                Model[]? records = JsonSerializer.Deserialize<Message>(message)?.Records;
+                Model[]? records = JsonSerializer.Deserialize<Message>(msg)?.Records;
                 if (records is not { Length: >0 })
                 {
                     logger.LogWarning(Events.MessageIsEmpty, "Message is empty {message}", msg);
