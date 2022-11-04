@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Web;
 
 namespace ContainerLogExporter;
 
@@ -42,12 +43,8 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // string name = $"{DateTime.UtcNow.ToString("yyyy-MM-dd-hh-mm-ss")}.json";
-            // byte[] buffer = Encoding.UTF8.GetBytes(message);
-            // using Stream stream = new MemoryStream(buffer);
-            // BlobContentInfo blobContentInfo = await blobContainerClient.UploadBlobAsync(name, stream);
-            // logger.LogInformation(4004, "Uploaded blob {name}, size: {size}, hash: {hash}", name, buffer.Length, blobContentInfo.ContentHash);
-            string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
+            string msg = HttpUtility.JavaScriptStringEncode(message, true);
+            // string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
                 using JsonDocument document = JsonDocument.Parse(msg, jsonDocumentOptions);
@@ -82,7 +79,11 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", Convert.ToBase64String(Encoding.UTF8.GetBytes(message)));
+                string name = $"{DateTime.UtcNow.ToString("yyyy-MM-dd-hh-mm-ss")}.json";
+                byte[] buffer = Encoding.UTF8.GetBytes(msg);
+                using Stream stream = new MemoryStream(buffer);
+                await blobContainerClient.UploadBlobAsync(name, stream);
+                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in {blob} blob.", name);
             }
         }
     }
