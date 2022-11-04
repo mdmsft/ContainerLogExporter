@@ -43,7 +43,7 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string msg = HttpUtility.JavaScriptStringEncode(message, true);
+            string msg = HttpUtility.JavaScriptStringEncode(message, false);
             // string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
