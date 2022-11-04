@@ -41,7 +41,7 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string msg = Regex.Replace(message, """LogMessage":\s*([^"].+[^"]),\s*"LogSource""", "$1", RegexOptions.Compiled | RegexOptions.Multiline);
+            string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
                 using JsonDocument document = JsonDocument.Parse(msg, new JsonDocumentOptions());
@@ -76,7 +76,7 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", Convert.ToBase64String(Encoding.UTF8.GetBytes(msg)));
+                logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", Convert.ToBase64String(Encoding.UTF8.GetBytes(message)));
             }
         }
     }
