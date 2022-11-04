@@ -1,3 +1,4 @@
+using Azure.Storage.Blobs;
 using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
@@ -12,7 +13,9 @@ internal class Function
 {
     private readonly ILogger logger;
     private readonly WorkspaceService workspaceService;
+    private readonly FunctionContext functionContext;
     private readonly TelemetryClient telemetryClient;
+    private readonly BlobContainerClient blobContainerClient;
     private readonly string[] ignoredNamespaces;
     private readonly string[] defaultIgnoredNamespaces = new[]
     {
@@ -23,21 +26,25 @@ internal class Function
         "kube-public",
     };
 
-    public Function(IConfiguration configuration, WorkspaceService workspaceService, FunctionContext functionContext, TelemetryClient telemetryClient)
+    public Function(IConfiguration configuration, WorkspaceService workspaceService, FunctionContext functionContext, TelemetryClient telemetryClient, BlobContainerClient blobContainerClient)
     {
         logger = functionContext.GetLogger<Function>();
         this.workspaceService = workspaceService;
+        this.functionContext = functionContext;
         this.telemetryClient = telemetryClient;
+        this.blobContainerClient = blobContainerClient;
         ignoredNamespaces = configuration.GetValue("IgnoredNamespaces", defaultIgnoredNamespaces);
     }
 
     [Function(nameof(Function))]
-    [BlobOutput("messages/message.json", Connection = "Blob")]
-    public async Task<string> Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, CancellationToken cancellationToken)
+    // [BlobOutput("messages/message.json", Connection = "Blob")]
+    public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, CancellationToken cancellationToken)
     {
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(message));
+            await blobContainerClient.UploadBlobAsync($"{DateTime.UtcNow.ToString("yyyy-MM-dd-hh-mm-ss")}.json", stream);
             string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
@@ -76,6 +83,5 @@ internal class Function
                 logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message: {message}", Convert.ToBase64String(Encoding.UTF8.GetBytes(message)));
             }
         }
-        return string.Join(string.Empty, messages);
     }
 }
