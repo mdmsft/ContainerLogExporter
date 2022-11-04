@@ -47,31 +47,13 @@ internal class Function
             // string msg = Regex.Replace(message.Replace(Environment.NewLine, string.Empty), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
-                using JsonDocument document = JsonDocument.Parse(msg, jsonDocumentOptions);
-                JsonElement root = document.RootElement.GetProperty("records");
-                List<Model> records = new();
-                foreach (JsonElement record in root.EnumerateArray())
+                Model[]? records = JsonSerializer.Deserialize<Message>(message)?.Records;
+                if (records is not { Length: >0 })
                 {
-                    try
-                    {
-                        Model? model = JsonSerializer.Deserialize<Model>(record);
-                        if (model is not null)
-                        {
-                            records.Add(model);
-                        }
-                    }
-                    catch (JsonException exception)
-                    {
-                        logger.LogError(Events.RecordCannotBeDeserialized, exception, "Error deserializing record: {record}", record.ToString());
-                        continue;
-                    }
-                }
-                if (records.Count == 0)
-                {
-                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty or has invalid records: {message}", msg);
+                    logger.LogWarning(Events.MessageIsEmpty, "Message is empty {message}", msg);
                     continue;
                 }
-                logger.LogInformation(Events.RecordsFound, "Found {count} valid records in the message", records.Count);
+                logger.LogInformation(Events.RecordsFound, "Found {count} records in the message", records.Length);
                 foreach (var group in records.GroupBy(record => record.PodNamespace).Where(group => Array.IndexOf(ignoredNamespaces, group.Key) == -1))
                 {
                     await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
