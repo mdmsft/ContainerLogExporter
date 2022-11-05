@@ -21,7 +21,8 @@ await new HostBuilder()
         .AddAzureAppConfiguration()
         .AddSingleton(provider => new BlobContainerClient(provider.GetRequiredService<IConfiguration>().GetValue<Uri>("BLOB_CONTAINER_URI"), tokenCredential))
         .AddSingleton(provider => new SecretClient(provider.GetRequiredService<IConfiguration>().GetValue<Uri>("VAULT_URI"), tokenCredential))
-        .AddSingleton<WorkspaceService>())
+        .AddSingleton<WorkspaceService>()
+        .AddSingleton<SecretService>())
     .ConfigureFunctionsWorkerDefaults(app =>
     {
         app.AddApplicationInsights().AddApplicationInsightsLogger();
