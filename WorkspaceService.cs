@@ -48,7 +48,7 @@ internal class WorkspaceService
         {
             await httpClient.SendLogs(entities);
         }
-        catch (HttpRequestException exception)
+        catch (Exception exception)
         {
             logger.LogError(Events.WorkspaceSendLogsHttpError, exception, "Error sending logs: {message}", exception.Message);
         }
