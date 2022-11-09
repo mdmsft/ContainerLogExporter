@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -8,12 +10,14 @@ internal class WorkspaceService
     private readonly ILogger<WorkspaceService> logger;
     private readonly IConfiguration configuration;
     private readonly SecretService secretService;
+    private readonly TelemetryClient telemetryClient;
 
-    public WorkspaceService(ILogger<WorkspaceService> logger, IConfiguration configuration, SecretService secretService)
+    public WorkspaceService(ILogger<WorkspaceService> logger, IConfiguration configuration, SecretService secretService, TelemetryClient telemetryClient)
     {
         this.logger = logger;
         this.configuration = configuration;
         this.secretService = secretService;
+        this.telemetryClient = telemetryClient;
     }
 
     public async Task SendLogs(string @namespace, Entity[] entities)
@@ -28,7 +32,7 @@ internal class WorkspaceService
             return;
         }
         logger.LogInformation(Events.WorkspaceIdFound, "Found workspace ID for namespace {namespace}: {id}", @namespace, $"{workspaceId[..8]}-***");
-        
+
         logger.LogInformation(Events.WorkspaceKeyLookup, "Looking up workspace key for namespace {namespace}", @namespace);
         string? workspaceKey = await secretService.GetSecret(@namespace);
         if (workspaceKey is null)
@@ -37,8 +41,13 @@ internal class WorkspaceService
             return;
         }
         logger.LogInformation(Events.WorkspaceKeyFound, "Found workspace key for namespace {namespace}: {id}", @namespace, $"***-{workspaceKey[^8..]}");
-        
+
         using WorkspaceHttpClient httpClient = new(workspaceId, workspaceKey);
+        telemetryClient.TrackEvent("dns", new Dictionary<string, string>
+        {
+            { "Host", httpClient.BaseAddress.Host },
+            { "Addresses", string.Join(',', Dns.GetHostEntry(httpClient.BaseAddress.Host).AddressList.Select(address => address.ToString())) }
+        });
         logger.LogInformation(Events.WorkspaceSendLogs, "Sending {count} records to workspace for namespace {namespace}", entities.Length, @namespace);
         try
         {
