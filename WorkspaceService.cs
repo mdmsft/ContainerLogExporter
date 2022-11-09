@@ -43,11 +43,6 @@ internal class WorkspaceService
         logger.LogInformation(Events.WorkspaceKeyFound, "Found workspace key for namespace {namespace}: {id}", @namespace, $"***-{workspaceKey[^8..]}");
 
         using WorkspaceHttpClient httpClient = new(workspaceId, workspaceKey);
-        telemetryClient.TrackEvent("dns", new Dictionary<string, string>
-        {
-            { "Host", httpClient.BaseAddress.Host },
-            { "Addresses", string.Join(',', Dns.GetHostEntry(httpClient.BaseAddress.Host).AddressList.Select(address => address.ToString())) }
-        });
         logger.LogInformation(Events.WorkspaceSendLogs, "Sending {count} records to workspace for namespace {namespace}", entities.Length, @namespace);
         try
         {
