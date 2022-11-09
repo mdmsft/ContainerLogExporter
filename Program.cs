@@ -23,10 +23,6 @@ await new HostBuilder()
         .AddSingleton(provider => new SecretClient(provider.GetRequiredService<IConfiguration>().GetValue<Uri>("VAULT_URI"), tokenCredential))
         .AddSingleton<WorkspaceService>()
         .AddSingleton<SecretService>())
-    .ConfigureFunctionsWorkerDefaults(app =>
-    {
-        app.AddApplicationInsights().AddApplicationInsightsLogger();
-        app.UseAzureAppConfiguration();
-    })
+    .ConfigureFunctionsWorkerDefaults(app => app.AddApplicationInsights().AddApplicationInsightsLogger().UseAzureAppConfiguration())
     .Build()
     .RunAsync();

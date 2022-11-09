@@ -8,14 +8,12 @@ internal class WorkspaceService
 {
     private readonly ILogger<WorkspaceService> logger;
     private readonly IConfiguration configuration;
-    private readonly TelemetryClient telemetryClient;
     private readonly SecretService secretService;
 
-    public WorkspaceService(ILogger<WorkspaceService> logger, IConfiguration configuration, TelemetryClient telemetryClient, SecretService secretService)
+    public WorkspaceService(ILogger<WorkspaceService> logger, IConfiguration configuration, SecretService secretService)
     {
         this.logger = logger;
         this.configuration = configuration;
-        this.telemetryClient = telemetryClient;
         this.secretService = secretService;
     }
 
