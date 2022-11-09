@@ -15,4 +15,5 @@ internal static class Events
     public static readonly EventId WorkspaceKeyNotFound = 2004;
     public static readonly EventId WorkspaceKeyFound = 2005;
     public static readonly EventId WorkspaceSendLogs = 2006;
+    public static readonly EventId WorkspaceSendLogsHttpError = 2007;
 }
