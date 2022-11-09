@@ -40,7 +40,7 @@ internal class Function
     {
         ILogger<Function> logger = functionContext.GetLogger<Function>();
         string correlation = functionContext.InvocationId;
-        string name = $"{DateTime.UtcNow.Year}/{DateTime.UtcNow.Month}/{DateTime.UtcNow.Day}/{DateTime.UtcNow.Hour}/{DateTime.UtcNow.Minute}/{DateTime.UtcNow.Second}/{correlation}";
+        string name = $"{DateTime.UtcNow.Year}/{DateTime.UtcNow.Month.ToString().PadLeft(2, '0')}/{DateTime.UtcNow.Day.ToString().PadLeft(2, '0')}/{DateTime.UtcNow.Hour.ToString().PadLeft(2, '0')}/{DateTime.UtcNow.Minute.ToString().PadLeft(2, '0')}/{correlation}";
         using var _ = logger.BeginScope(correlation);
         foreach (string message in messages)
         {
@@ -60,10 +60,10 @@ internal class Function
                 }
                 Model[] valuableRecords = records.Where(record => !ignoredNamespaces.Contains(record.PodNamespace)).ToArray();
                 logger.LogInformation(Events.RecordsFound, "Found {total} records in the message, but only {valuable} are valuable", records.Length, valuableRecords.Length);
-                await Task.WhenAll(valuableRecords
-                    .GroupBy(record => record.PodNamespace)
-                    .Select(group => workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray()))
-                    .ToArray());
+                foreach (var group in valuableRecords.GroupBy(record => record.PodNamespace))
+                {
+                    await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
+                }
             }
             catch (JsonException exception)
             {
