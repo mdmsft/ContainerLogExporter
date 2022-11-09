@@ -3,6 +3,8 @@ using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
+using Microsoft.FeatureManagement.FeatureFilters;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -13,8 +15,8 @@ namespace ContainerLogExporter;
 internal class Function
 {
     private readonly WorkspaceService workspaceService;
-    private readonly TelemetryClient telemetryClient;
     private readonly BlobContainerClient blobContainerClient;
+    private readonly IFeatureManager featureManager;
     private readonly HashSet<string> ignoredNamespaces;
     private readonly string[] defaultIgnoredNamespaces = new[]
     {
@@ -26,12 +28,12 @@ internal class Function
     };
     private readonly JsonDocumentOptions jsonDocumentOptions = new() { AllowTrailingCommas = true };
 
-    public Function(IConfiguration configuration, WorkspaceService workspaceService, TelemetryClient telemetryClient, BlobContainerClient blobContainerClient)
+    public Function(IConfiguration configuration, WorkspaceService workspaceService, BlobContainerClient blobContainerClient, IFeatureManager featureManager)
     {
         this.workspaceService = workspaceService;
-        this.telemetryClient = telemetryClient;
         this.blobContainerClient = blobContainerClient;
-        ignoredNamespaces = new(configuration.GetValue<string[]>("IgnoredNamespaces", defaultIgnoredNamespaces));
+        this.featureManager = featureManager;
+        ignoredNamespaces = new(configuration.GetValue<string[]>("IgnoredNamespaces") ?? defaultIgnoredNamespaces);
     }
 
     [Function(nameof(Function))]
@@ -42,6 +44,11 @@ internal class Function
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            bool isFeatureEnabled = await featureManager.IsEnabledAsync(Features.BlobifyAllMessages);
+            if (isFeatureEnabled)
+            {
+                await UploadBlob(functionContext.InvocationId, message);
+            }
             string json = Regex.Replace(HttpUtility.JavaScriptStringEncode(message).Replace("\\\"", "\""), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
@@ -60,10 +67,18 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-                await blobContainerClient.UploadBlobAsync($"{functionContext.InvocationId}.json", stream);
+                if (!isFeatureEnabled)
+                {
+                    await UploadBlob(functionContext.InvocationId, message);
+                }
                 logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blob.");
             }
         }
+    }
+
+    private async Task UploadBlob(string invocation, string message)
+    {
+        using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(message));
+        await blobContainerClient.UploadBlobAsync(invocation, stream);
     }
 }
