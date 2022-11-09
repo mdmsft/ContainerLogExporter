@@ -2,5 +2,5 @@ namespace ContainerLogExporter;
 
 internal static class Features
 {
-    public static readonly string BlobifyAllMessages = "message:blob:all";
+    public static readonly string BlobifyMessage = "message:blob";
 }

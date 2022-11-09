@@ -40,14 +40,14 @@ internal class Function
     public async Task Run([EventHubTrigger("%EVENT_HUB_NAME%", Connection = "EventHub")] string[] messages, FunctionContext functionContext, CancellationToken cancellationToken)
     {
         ILogger<Function> logger = functionContext.GetLogger<Function>();
-        using var _ = logger.BeginScope(functionContext.InvocationId);
+        string correlation = functionContext.InvocationId;
+        using var _ = logger.BeginScope(correlation);
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            bool isFeatureEnabled = await featureManager.IsEnabledAsync(Features.BlobifyAllMessages);
-            if (isFeatureEnabled)
+            if (await featureManager.IsEnabledAsync(Features.BlobifyMessage))
             {
-                await UploadBlob(functionContext.InvocationId, message);
+                await UploadBlob(correlation, message);
             }
             string json = Regex.Replace(HttpUtility.JavaScriptStringEncode(message).Replace("\\\"", "\""), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
@@ -67,9 +67,9 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                if (!isFeatureEnabled)
+                if (!await blobContainerClient.GetBlobClient(correlation).ExistsAsync())
                 {
-                    await UploadBlob(functionContext.InvocationId, message);
+                    await UploadBlob(correlation, message);
                 }
                 logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blob.");
             }
