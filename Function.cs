@@ -16,7 +16,6 @@ internal class Function
     private readonly WorkspaceService workspaceService;
     private readonly BlobContainerClient blobContainerClient;
     private readonly IFeatureManager featureManager;
-    private readonly TelemetryClient telemetryClient;
     private readonly HashSet<string> ignoredNamespaces;
     private readonly string[] defaultIgnoredNamespaces = new[]
     {
@@ -28,12 +27,11 @@ internal class Function
     };
     private readonly JsonDocumentOptions jsonDocumentOptions = new() { AllowTrailingCommas = true };
 
-    public Function(IConfiguration configuration, WorkspaceService workspaceService, BlobContainerClient blobContainerClient, IFeatureManager featureManager, TelemetryClient telemetryClient)
+    public Function(IConfiguration configuration, WorkspaceService workspaceService, BlobContainerClient blobContainerClient, IFeatureManager featureManager)
     {
         this.workspaceService = workspaceService;
         this.blobContainerClient = blobContainerClient;
         this.featureManager = featureManager;
-        this.telemetryClient = telemetryClient;
         ignoredNamespaces = new(configuration.GetValue<string[]>("IgnoredNamespaces") ?? defaultIgnoredNamespaces);
     }
 
@@ -62,18 +60,10 @@ internal class Function
                 }
                 Model[] valuableRecords = records.Where(record => !ignoredNamespaces.Contains(record.PodNamespace)).ToArray();
                 logger.LogInformation(Events.RecordsFound, "Found {total} records in the message, but only {valuable} are valuable", records.Length, valuableRecords.Length);
-                foreach (var group in valuableRecords.GroupBy(record => record.PodNamespace))
-                {
-                    try
-                    {
-                        await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
-                    }
-                    catch (HttpRequestException exception)
-                    {
-                        logger.LogError(Events.WorkspaceSendLogsHttpError, "Error sending logs: {error}", exception.Message);
-                        telemetryClient.TrackException(exception);
-                    }
-                }
+                await Task.WhenAll(valuableRecords
+                    .GroupBy(record => record.PodNamespace)
+                    .Select(group => workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray()))
+                    .ToArray());
             }
             catch (JsonException exception)
             {

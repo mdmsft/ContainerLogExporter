@@ -1,4 +1,3 @@
-using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -41,6 +40,13 @@ internal class WorkspaceService
         
         using WorkspaceHttpClient httpClient = new(workspaceId, workspaceKey);
         logger.LogInformation(Events.WorkspaceSendLogs, "Sending {count} records to workspace for namespace {namespace}", entities.Length, @namespace);
-        await httpClient.SendLogs(entities);
+        try
+        {
+            await httpClient.SendLogs(entities);
+        }
+        catch (HttpRequestException exception)
+        {
+            logger.LogError(Events.WorkspaceSendLogsHttpError, exception, "Error sending logs: {message}", exception.Message);
+        }
     }
 }
