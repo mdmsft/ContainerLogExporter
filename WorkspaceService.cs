@@ -1,7 +1,9 @@
+using Azure.Core;
 using Azure.ResourceManager;
 using Azure.ResourceManager.OperationalInsights;
 using Azure.ResourceManager.Resources;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Net.Mime;
 using System.Security.Cryptography;
@@ -15,16 +17,18 @@ internal class WorkspaceService
     private readonly ILogger<WorkspaceService> logger;
     private readonly IHttpClientFactory factory;
     private readonly IMemoryCache cache;
+    private readonly IConfiguration configuration;
     private readonly ArmClient arm;
 
     private const string AuthorizationScheme = "SharedKey";
     private const string NamespaceTag = "namespace";
 
-    public WorkspaceService(ILogger<WorkspaceService> logger, IHttpClientFactory factory, IMemoryCache cache, ArmClient arm)
+    public WorkspaceService(ILogger<WorkspaceService> logger, IHttpClientFactory factory, IMemoryCache cache, IConfiguration configuration, ArmClient arm)
     {
         this.logger = logger;
         this.factory = factory;
         this.cache = cache;
+        this.configuration = configuration;
         this.arm = arm;
     }
 
@@ -36,7 +40,7 @@ internal class WorkspaceService
         (string? workspaceId, string? workspaceKey) = await cache.GetOrCreateAsync(@namespace, async entry =>
         {
             (string? workspaceId, string? workspaceKey) data = default;
-            SubscriptionResource subscription = await arm.GetDefaultSubscriptionAsync();
+            SubscriptionResource subscription = arm.GetSubscriptionResource(new($"/subscriptions/{configuration.GetValue<string>("SUBSCRIPTION_ID")}"));
             await foreach (var workspace in subscription.GetWorkspacesAsync())
             {
                 if (workspace.Data.Tags.ContainsKey(NamespaceTag) && workspace.Data.Tags[NamespaceTag].Equals(@namespace, StringComparison.Ordinal))
