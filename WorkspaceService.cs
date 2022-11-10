@@ -1,3 +1,7 @@
+using Azure.ResourceManager;
+using Azure.ResourceManager.OperationalInsights;
+using Azure.ResourceManager.Resources;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Net.Mime;
 using System.Security.Cryptography;
@@ -9,39 +13,54 @@ namespace ContainerLogExporter;
 internal class WorkspaceService
 {
     private readonly ILogger<WorkspaceService> logger;
-    private readonly IHttpClientFactory clientFactory;
-    private readonly SecretService secretService;
+    private readonly IHttpClientFactory factory;
+    private readonly IMemoryCache cache;
+    private readonly ArmClient arm;
 
     private const string AuthorizationScheme = "SharedKey";
+    private const string NamespaceTag = "namespace";
 
-    public WorkspaceService(ILogger<WorkspaceService> logger, IHttpClientFactory clientFactory, SecretService secretService)
+    public WorkspaceService(ILogger<WorkspaceService> logger, IHttpClientFactory factory, IMemoryCache cache, ArmClient arm)
     {
         this.logger = logger;
-        this.clientFactory = clientFactory;
-        this.secretService = secretService;
+        this.factory = factory;
+        this.cache = cache;
+        this.arm = arm;
     }
 
     public async Task SendLogs(string @namespace, Entity[] entities)
     {
         using var scope = logger.BeginScope(@namespace);
 
-        logger.LogInformation(Events.WorkspaceKeyLookup, "Looking up workspace key for namespace {namespace}", @namespace);
-        string? workspaceKey = await secretService.GetSecret(@namespace);
-        if (workspaceKey is null)
+        logger.LogDebug(Events.WorkspaceDataLookup, "Looking up workspace data for namespace {namespace}", @namespace);
+        (string? workspaceId, string? workspaceKey) = await cache.GetOrCreateAsync(@namespace, async entry =>
         {
-            logger.LogError(Events.WorkspaceKeyNotFound, "Failed to find workspace key for namespace {namespace}", @namespace);
+            (string? workspaceId, string? workspaceKey) data = default;
+            SubscriptionResource subscription = await arm.GetDefaultSubscriptionAsync();
+            await foreach (var workspace in subscription.GetWorkspacesAsync())
+            {
+                if (workspace.Data.Tags.ContainsKey(NamespaceTag) && workspace.Data.Tags[NamespaceTag].Equals(@namespace, StringComparison.Ordinal))
+                {
+                    var sharedKeys = await workspace.GetSharedKeysSharedKeyAsync();
+                    data = (workspace.Data.CustomerId, sharedKeys.Value.PrimarySharedKey);
+                }
+            }
+            entry.SetValue(data).SetAbsoluteExpiration(TimeSpan.FromMinutes(1));
+            return data;
+        });
+        if (workspaceId is not { Length: > 0 } || workspaceKey is not { Length: > 0 })
+        {
+            logger.LogError(Events.WorkspaceDataNotFound, "Failed to find workspace data for namespace {namespace}", @namespace);
             return;
         }
-        logger.LogInformation(Events.WorkspaceKeyFound, "Found workspace key for namespace {namespace}: {id}", @namespace, $"***-{workspaceKey[^8..]}");
+        logger.LogDebug(Events.WorkspaceDataFound, "Found workspace data for namespace {namespace}: {id}/{key}", @namespace, $"{workspaceId[..8]}-***", $"***-{workspaceKey[^8..]}");
 
         string json = JsonSerializer.Serialize(entities);
-
-        using HttpClient client = clientFactory.CreateClient(@namespace);
-        using HttpContent httpContent = new StringContent(json, Encoding.UTF8);
-        
         string timestamp = DateTime.UtcNow.ToString("r");
-        string workspaceId = client.BaseAddress!.Host.Split('.')[0];
-        
+
+        using HttpClient client = factory.CreateClient(nameof(WorkspaceService));
+        using HttpContent httpContent = new StringContent(json, Encoding.UTF8);
+        client.BaseAddress = new Uri($"https://{workspaceId}.ods.opinsights.azure.com/api/logs?api-version=2016-04-01");
         httpContent.Headers.ContentType = new(MediaTypeNames.Application.Json);
         client.DefaultRequestHeaders.Authorization = new(AuthorizationScheme, GetAuthorizationHeaderValue(json, workspaceId, workspaceKey, timestamp));
         client.DefaultRequestHeaders.Add("x-ms-date", timestamp);

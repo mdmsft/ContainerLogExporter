@@ -2,7 +2,6 @@ using Azure.Storage.Blobs;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -14,7 +13,6 @@ internal class Function
 {
     private readonly WorkspaceService workspaceService;
     private readonly BlobContainerClient blobContainerClient;
-    private readonly IFeatureManager featureManager;
     private readonly HashSet<string> ignoredNamespaces;
     private readonly string[] defaultIgnoredNamespaces = new[]
     {
@@ -26,11 +24,10 @@ internal class Function
     };
     private readonly JsonDocumentOptions jsonDocumentOptions = new() { AllowTrailingCommas = true };
 
-    public Function(IConfiguration configuration, WorkspaceService workspaceService, BlobContainerClient blobContainerClient, IFeatureManager featureManager)
+    public Function(IConfiguration configuration, WorkspaceService workspaceService, BlobContainerClient blobContainerClient)
     {
         this.workspaceService = workspaceService;
         this.blobContainerClient = blobContainerClient;
-        this.featureManager = featureManager;
         ignoredNamespaces = new(configuration.GetValue<string[]>("IgnoredNamespaces") ?? defaultIgnoredNamespaces);
     }
 
@@ -39,15 +36,10 @@ internal class Function
     {
         ILogger<Function> logger = functionContext.GetLogger<Function>();
         string correlation = functionContext.InvocationId;
-        string name = $"{DateTime.UtcNow.Year}/{DateTime.UtcNow.Month.ToString().PadLeft(2, '0')}/{DateTime.UtcNow.Day.ToString().PadLeft(2, '0')}/{DateTime.UtcNow.Hour.ToString().PadLeft(2, '0')}/{DateTime.UtcNow.Minute.ToString().PadLeft(2, '0')}/{correlation}";
         using var _ = logger.BeginScope(correlation);
         foreach (string message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await featureManager.IsEnabledAsync(Features.BlobifyMessage))
-            {
-                await UploadBlob(name, message);
-            }
             string json = Regex.Replace(HttpUtility.JavaScriptStringEncode(message).Replace("\\\"", "\""), """(?<="LogMessage":)\s+(?!")(.*?)(?!")(?=,\s"LogSource")""", "\"$1\"", RegexOptions.Multiline);
             try
             {
@@ -58,7 +50,7 @@ internal class Function
                     continue;
                 }
                 Model[] valuableRecords = records.Where(record => !ignoredNamespaces.Contains(record.PodNamespace)).ToArray();
-                logger.LogInformation(Events.RecordsFound, "Found {total} records in the message, but only {valuable} are valuable", records.Length, valuableRecords.Length);
+                logger.LogDebug(Events.RecordsFound, "Found {total} records in the message, but only {valuable} are valuable", records.Length, valuableRecords.Length);
                 foreach (var group in valuableRecords.GroupBy(record => record.PodNamespace))
                 {
                     await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
@@ -66,18 +58,13 @@ internal class Function
             }
             catch (JsonException exception)
             {
-                if (!await blobContainerClient.GetBlobClient(name).ExistsAsync())
+                if (!await blobContainerClient.GetBlobClient(correlation).ExistsAsync())
                 {
-                    await UploadBlob(name, message);
+                    using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(message));
+                    await blobContainerClient.UploadBlobAsync(correlation, stream);
                 }
                 logger.LogError(Events.MessageCannotBeParsed, exception, "Error parsing message. Details can be found in corresponding blob.");
             }
         }
-    }
-
-    private async Task UploadBlob(string invocation, string message)
-    {
-        using Stream stream = new MemoryStream(Encoding.UTF8.GetBytes(message));
-        await blobContainerClient.UploadBlobAsync(invocation, stream);
     }
 }
