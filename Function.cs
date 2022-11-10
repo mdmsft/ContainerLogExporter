@@ -51,10 +51,9 @@ internal class Function
                 }
                 Model[] valuableRecords = records.Where(record => !ignoredNamespaces.Contains(record.PodNamespace)).ToArray();
                 logger.LogDebug(Events.RecordsFound, "Found {total} records in the message, but only {valuable} are valuable", records.Length, valuableRecords.Length);
-                foreach (var group in valuableRecords.GroupBy(record => record.PodNamespace))
-                {
-                    await workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray());
-                }
+                await Task.WhenAll(valuableRecords
+                    .GroupBy(record => record.PodNamespace)
+                    .Select(group => workspaceService.SendLogs(group.Key, group.Select(g => g.ToEntity()).ToArray())));
             }
             catch (JsonException exception)
             {
