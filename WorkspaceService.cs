@@ -57,7 +57,7 @@ internal class WorkspaceService
         }
     }
 
-    private string GetAuthorizationHeaderValue(string jsonPayload, string workspaceId, string workspaceKey, string timestamp)
+    private static string GetAuthorizationHeaderValue(string jsonPayload, string workspaceId, string workspaceKey, string timestamp)
     {
         byte[] jsonBytes = Encoding.UTF8.GetBytes(jsonPayload);
         string signPayload = string.Join("\n", new[] { "POST", jsonBytes.Length.ToString(), MediaTypeNames.Application.Json, $"x-ms-date:{timestamp}", "/api/logs" });
